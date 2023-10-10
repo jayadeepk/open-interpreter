@@ -39,6 +39,12 @@ arguments = [
         "type": str
     },
     {
+        "name": "gpu",
+        "nickname": "g",
+        "help_text": "enable GPU for the language model",
+        "type": bool
+    },
+    {
         "name": "temperature",
         "nickname": "t",
         "help_text": "optional temperature setting for the language model",

@@ -24,61 +24,69 @@ def setup_local_text_llm(interpreter):
     DEFAULT_CONTEXT_WINDOW = 2000
     DEFAULT_MAX_TOKENS = 1000
 
-    repo_id = interpreter.model.replace("huggingface/", "")
+    if interpreter.model.endswith(".gguf"):
+        selected_model = interpreter.model
 
-    if "TheBloke/CodeLlama-" not in repo_id:
-      # ^ This means it was prob through the old --local, so we have already displayed this message.
-      # Hacky. Not happy with this
-      rprint('', Markdown(f"**Open Interpreter** will use `{repo_id}` for local execution. Use your arrow keys to set up the model."), '')
-
-    raw_models = list_gguf_files(repo_id)
-    
-    if not raw_models:
-        rprint(f"Failed. Are you sure there are GGUF files in `{repo_id}`?")
-        return None
-
-    combined_models = group_and_combine_splits(raw_models)
-
-    selected_model = None
-
-    # First we give them a simple small medium large option. If they want to see more, they can.
-
-    if len(combined_models) > 3:
-
-        # Display Small Medium Large options to user
-        choices = [
-            format_quality_choice(combined_models[0], "Small"),
-            format_quality_choice(combined_models[len(combined_models) // 2], "Medium"),
-            format_quality_choice(combined_models[-1], "Large"),
-            "See More"
-        ]
-        questions = [inquirer.List('selected_model', message="Quality (smaller is faster, larger is more capable)", choices=choices)]
-        answers = inquirer.prompt(questions)
-        if answers["selected_model"].startswith("Small"):
-            selected_model = combined_models[0]["filename"]
-        elif answers["selected_model"].startswith("Medium"):
-            selected_model = combined_models[len(combined_models) // 2]["filename"]
-        elif answers["selected_model"].startswith("Large"):
-            selected_model = combined_models[-1]["filename"]
-    
-    if selected_model == None:
-        # This means they either selected See More,
-        # Or the model only had 1 or 2 options
-
-        # Display to user
-        choices = [format_quality_choice(model) for model in combined_models]
-        questions = [inquirer.List('selected_model', message="Quality (smaller is faster, larger is more capable)", choices=choices)]
-        answers = inquirer.prompt(questions)
-        for model in combined_models:
-            if format_quality_choice(model) == answers["selected_model"]:
-                selected_model = model["filename"]
-                break
-
-    # Third stage: GPU confirm
-    if confirm_action("Use GPU? (Large models might crash on GPU, but will run more quickly)"):
-      n_gpu_layers = -1
+        if interpreter.gpu:
+            n_gpu_layers = -1
+        else:
+            n_gpu_layers = 0
     else:
-      n_gpu_layers = 0
+        repo_id = interpreter.model.replace("huggingface/", "")
+
+        if "TheBloke/CodeLlama-" not in repo_id:
+            # ^ This means it was prob through the old --local, so we have already displayed this message.
+            # Hacky. Not happy with this
+            rprint('', Markdown(f"**Open Interpreter** will use `{repo_id}` for local execution. Use your arrow keys to set up the model."), '')
+
+        raw_models = list_gguf_files(repo_id)
+
+        if not raw_models:
+            rprint(f"Failed. Are you sure there are GGUF files in `{repo_id}`?")
+            return None
+
+        combined_models = group_and_combine_splits(raw_models)
+
+        selected_model = None
+
+        # First we give them a simple small medium large option. If they want to see more, they can.
+
+        if len(combined_models) > 3:
+
+            # Display Small Medium Large options to user
+            choices = [
+                format_quality_choice(combined_models[0], "Small"),
+                format_quality_choice(combined_models[len(combined_models) // 2], "Medium"),
+                format_quality_choice(combined_models[-1], "Large"),
+                "See More"
+            ]
+            questions = [inquirer.List('selected_model', message="Quality (smaller is faster, larger is more capable)", choices=choices)]
+            answers = inquirer.prompt(questions)
+            if answers["selected_model"].startswith("Small"):
+                selected_model = combined_models[0]["filename"]
+            elif answers["selected_model"].startswith("Medium"):
+                selected_model = combined_models[len(combined_models) // 2]["filename"]
+            elif answers["selected_model"].startswith("Large"):
+                selected_model = combined_models[-1]["filename"]
+
+        if selected_model == None:
+            # This means they either selected See More,
+            # Or the model only had 1 or 2 options
+
+            # Display to user
+            choices = [format_quality_choice(model) for model in combined_models]
+            questions = [inquirer.List('selected_model', message="Quality (smaller is faster, larger is more capable)", choices=choices)]
+            answers = inquirer.prompt(questions)
+            for model in combined_models:
+                if format_quality_choice(model) == answers["selected_model"]:
+                    selected_model = model["filename"]
+                    break
+
+        # Third stage: GPU confirm
+        if confirm_action("Use GPU? (Large models might crash on GPU, but will run more quickly)"):
+            n_gpu_layers = -1
+        else:
+            n_gpu_layers = 0
 
     # Get user data directory
     user_data_dir = appdirs.user_data_dir("Open Interpreter")
@@ -102,6 +110,14 @@ def setup_local_text_llm(interpreter):
             model_path = path
             break
     else:
+        if interpreter.model.endswith(".gguf"):
+            # This means they selected a custom model, but it wasn't found
+            rprint(f"Could not find `{selected_model}` in any of the following directories:")
+            for directory in directories_to_check:
+                rprint(f" - `{directory}`")
+            rprint(f"Please check that the model exists and try again.")
+            return None
+
         # If the file was not found, ask for confirmation to download it
         download_path = os.path.join(default_path, selected_model)
       
